@@ -42,26 +42,37 @@
 #include "libscrypt.h"
 
 static void blkcpy(void *, void *, size_t);
+static void blkcpy_conditional(void *, void *, size_t, int);
 static void blkxor(void *, void *, size_t);
-static void salsa20_8(uint32_t[16]);
-static void blockmix_salsa8(uint32_t *, uint32_t *, uint32_t *, size_t);
+static void salsa20_8(uint32_t[16], int);
+static void blockmix_salsa8(uint32_t *, uint32_t *, uint32_t *, size_t, int);
 static uint64_t integerify(void *, size_t);
-static void smix(uint8_t *, size_t, uint64_t, uint32_t *, uint32_t *);
+static void smix(uint8_t *, size_t, uint64_t, uint32_t *, uint32_t *, int);
 
-// static void
-// blkcpy(void * dest, void * src, size_t len)
-// {
-// 	size_t * D = dest;
-// 	size_t * S = src;
-// 	size_t L = len / sizeof(size_t);
-// 	size_t i;
+static void
+blkcpy_conditional(void * dest, void * src, size_t len, int useOldCompiler)
+{
+	size_t * D = dest;
+	size_t * S = src;
+	size_t L = len / sizeof(size_t);
+	size_t i;
 
-// 	for (i = 0; i < L; i++)
-// 		D[i] = S[i];
-// }
+	for (i = 0; i < L; i++)
+		D[i] = S[i];
+}
+
 // Workaround for Apple compiler bug that breaks the above in -Os
 // See: https://github.com/technion/libscrypt/issues/60
-#define blkcpy(dest, src, len) memmove((dest), (src), (len))
+// #define blkcpy(dest, src, len) memmove((dest), (src), (len))
+
+// The following function supports both the old and new compilers 
+// static void blkcpy_conditional(void *dest, void *src, size_t len, int useOldCompiler) {
+    // if (useOldCompiler == 1) {
+		// blkcpy(dest, src, len);
+    // } else {
+	// 	memmove((dest), (src), (len));
+    // }
+// }
 
 static void
 blkxor(void * dest, void * src, size_t len)
@@ -80,12 +91,12 @@ blkxor(void * dest, void * src, size_t len)
  * Apply the salsa20/8 core to the provided block.
  */
 static void
-salsa20_8(uint32_t B[16])
+salsa20_8(uint32_t B[16], int useOldCompiler)
 {
 	uint32_t x[16];
 	size_t i;
 
-	blkcpy(x, B, 64);
+	blkcpy_conditional(x, B, 64, useOldCompiler);
 	for (i = 0; i < 8; i += 2) {
 #define R(a,b) (((a) << (b)) | ((a) >> (32 - (b))))
 		/* Operate on columns. */
@@ -126,30 +137,31 @@ salsa20_8(uint32_t B[16])
  * temporary space X must be 64 bytes.
  */
 static void
-blockmix_salsa8(uint32_t * Bin, uint32_t * Bout, uint32_t * X, size_t r)
+blockmix_salsa8(uint32_t * Bin, uint32_t * Bout, uint32_t * X, size_t r, int useOldCompiler)
 {
 	size_t i;
 
 	/* 1: X <-- B_{2r - 1} */
-	blkcpy(X, &Bin[(2 * r - 1) * 16], 64);
+	blkcpy_conditional(X, &Bin[(2 * r - 1) * 16], 64, useOldCompiler);
+
 
 	/* 2: for i = 0 to 2r - 1 do */
 	for (i = 0; i < 2 * r; i += 2) {
 		/* 3: X <-- H(X \xor B_i) */
 		blkxor(X, &Bin[i * 16], 64);
-		salsa20_8(X);
+		salsa20_8(X, useOldCompiler);
 
 		/* 4: Y_i <-- X */
 		/* 6: B' <-- (Y_0, Y_2 ... Y_{2r-2}, Y_1, Y_3 ... Y_{2r-1}) */
-		blkcpy(&Bout[i * 8], X, 64);
+		blkcpy_conditional(&Bout[i * 8], X, 64, useOldCompiler);
 
 		/* 3: X <-- H(X \xor B_i) */
 		blkxor(X, &Bin[i * 16 + 16], 64);
-		salsa20_8(X);
+		salsa20_8(X, useOldCompiler);
 
 		/* 4: Y_i <-- X */
 		/* 6: B' <-- (Y_0, Y_2 ... Y_{2r-2}, Y_1, Y_3 ... Y_{2r-1}) */
-		blkcpy(&Bout[i * 8 + r * 16], X, 64);
+		blkcpy_conditional(&Bout[i * 8 + r * 16], X, 64, useOldCompiler);
 	}
 }
 
@@ -174,7 +186,7 @@ integerify(void * B, size_t r)
  * multiple of 64 bytes.
  */
 static void
-smix(uint8_t * B, size_t r, uint64_t N, uint32_t * V, uint32_t * XY)
+smix(uint8_t * B, size_t r, uint64_t N, uint32_t * V, uint32_t * XY, int useOldCompiler)
 {
 	uint32_t * X = XY;
 	uint32_t * Y = &XY[32 * r];
@@ -188,19 +200,13 @@ smix(uint8_t * B, size_t r, uint64_t N, uint32_t * V, uint32_t * XY)
 		X[k] = le32dec(&B[4 * k]);
 
 	/* 2: for i = 0 to N - 1 do */
-	for (i = 0; i < N; i += 2) {
-		/* 3: V_i <-- X */
-		blkcpy(&V[i * (32 * r)], X, 128 * r);
+	 for (i = 0; i < N; i += 2) {
+        blkcpy_conditional(&V[i * (32 * r)], X, 128 * r, useOldCompiler);
+        blockmix_salsa8(X, Y, Z, r, useOldCompiler); // Assume blockmix_salsa8 also modified
 
-		/* 4: X <-- H(X) */
-		blockmix_salsa8(X, Y, Z, r);
-
-		/* 3: V_i <-- X */
-		blkcpy(&V[(i + 1) * (32 * r)], Y, 128 * r);
-
-		/* 4: X <-- H(X) */
-		blockmix_salsa8(Y, X, Z, r);
-	}
+        blkcpy_conditional(&V[(i + 1) * (32 * r)], Y, 128 * r, useOldCompiler);
+        blockmix_salsa8(Y, X, Z, r, useOldCompiler); // Assume blockmix_salsa8 also modified
+    }
 
 	/* 6: for i = 0 to N - 1 do */
 	for (i = 0; i < N; i += 2) {
@@ -209,14 +215,14 @@ smix(uint8_t * B, size_t r, uint64_t N, uint32_t * V, uint32_t * XY)
 
 		/* 8: X <-- H(X \xor V_j) */
 		blkxor(X, &V[j * (32 * r)], 128 * r);
-		blockmix_salsa8(X, Y, Z, r);
+		blockmix_salsa8(X, Y, Z, r, useOldCompiler);
 
 		/* 7: j <-- Integerify(X) mod N */
 		j = integerify(Y, r) & (N - 1);
 
 		/* 8: X <-- H(X \xor V_j) */
 		blkxor(Y, &V[j * (32 * r)], 128 * r);
-		blockmix_salsa8(Y, X, Z, r);
+		blockmix_salsa8(Y, X, Z, r, useOldCompiler);
 	}
 
 	/* 10: B' <-- X */
@@ -236,7 +242,7 @@ smix(uint8_t * B, size_t r, uint64_t N, uint32_t * V, uint32_t * XY)
 int
 libscrypt_scrypt(const uint8_t * passwd, size_t passwdlen,
     const uint8_t * salt, size_t saltlen, uint64_t N, uint32_t r, uint32_t p,
-    uint8_t * buf, size_t buflen)
+    uint8_t * buf, size_t buflen, int useOldCompiler)
 {
 	void * B0, * V0, * XY0;
 	uint8_t * B;
@@ -316,7 +322,7 @@ libscrypt_scrypt(const uint8_t * passwd, size_t passwdlen,
 	/* 2: for i = 0 to p - 1 do */
 	for (i = 0; i < p; i++) {
 		/* 3: B_i <-- MF(B_i, N) */
-		smix(&B[i * 128 * r], r, N, V, XY);
+		smix(&B[i * 128 * r], r, N, V, XY, useOldCompiler);
 	}
 
 	/* 5: DK <-- PBKDF2(P, B, 1, dkLen) */

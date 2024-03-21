@@ -25,7 +25,7 @@ public enum ScryptError: Error {
 /// - Returns: Password hash corresponding to given `length`.
 /// - Throws: [ScryptError](x-source-tag://scryptErrorType)
 public func scrypt(password: [UInt8], salt: [UInt8], length: Int = 64,
-                   N: UInt64 = 16384, r: UInt32 = 8, p: UInt32 = 1) throws -> [UInt8] {
+                   N: UInt64 = 16384, r: UInt32 = 8, p: UInt32 = 1, useOldCompiler: Bool = false) throws -> [UInt8] {
     guard length > 0, UInt64(length) <= 137_438_953_440 else {
         throw ScryptError.invalidLength
     }
@@ -43,11 +43,14 @@ public func scrypt(password: [UInt8], salt: [UInt8], length: Int = 64,
                 guard !saltptr.isEmpty else {
                     throw ScryptError.emptySalt
                 }
+                // Convert useOldCompiler to the format expected by C (int).
+                let useOldCompilerInt = useOldCompiler ? 1 : 0
                 result = libscrypt_scrypt(
                     passwd.baseAddress!, passwd.count,
                     saltptr.baseAddress!, saltptr.count,
                     N, r, p,
-                    bufptr.baseAddress!, length
+                    bufptr.baseAddress!, length,
+                    Int32(useOldCompilerInt) // Pass the useOldCompiler flag to the C function.
                 )
             }
         }
