@@ -29,21 +29,21 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "sysendian_legacy.h"
+#include "sysendian.h"
 
-#include "sha256_legacy.h"
+#include "sha256.h"
 
 /*
  * Encode a length len/4 vector of (uint32_t) into a length len vector of
  * (unsigned char) in big-endian form.  Assumes len is a multiple of 4.
  */
 static void
-be32enc_vect_legacy(unsigned char *dst, const uint32_t *src, size_t len)
+be32enc_vect(unsigned char *dst, const uint32_t *src, size_t len)
 {
 	size_t i;
 
 	for (i = 0; i < len / 4; i++)
-		be32enc_legacy(dst + i * 4, src[i]);
+		be32enc(dst + i * 4, src[i]);
 }
 
 /*
@@ -51,34 +51,34 @@ be32enc_vect_legacy(unsigned char *dst, const uint32_t *src, size_t len)
  * len/4 vector of (uint32_t).  Assumes len is a multiple of 4.
  */
 static void
-be32dec_vect_legacy(uint32_t *dst, const unsigned char *src, size_t len)
+be32dec_vect(uint32_t *dst, const unsigned char *src, size_t len)
 {
 	size_t i;
 
 	for (i = 0; i < len / 4; i++)
-		dst[i] = be32dec_legacy(src + i * 4);
+		dst[i] = be32dec(src + i * 4);
 }
 
 /* Elementary functions used by SHA256 */
-#define Ch_legacy(x, y, z)	((x & (y ^ z)) ^ z)
-#define Maj_legacy(x, y, z)	((x & (y | z)) | (y & z))
-#define SHR_legacy(x, n)	(x >> n)
-#define ROTR_legacy(x, n)	((x >> n) | (x << (32 - n)))
-#define S0_legacy(x)		(ROTR_legacy(x, 2) ^ ROTR_legacy(x, 13) ^ ROTR_legacy(x, 22))
-#define S1_legacy(x)		(ROTR_legacy(x, 6) ^ ROTR_legacy(x, 11) ^ ROTR_legacy(x, 25))
-#define s0_legacy(x)		(ROTR_legacy(x, 7) ^ ROTR_legacy(x, 18) ^ SHR_legacy(x, 3))
-#define s1_legacy(x)		(ROTR_legacy(x, 17) ^ ROTR_legacy(x, 19) ^ SHR_legacy(x, 10))
+#define Ch(x, y, z)	((x & (y ^ z)) ^ z)
+#define Maj(x, y, z)	((x & (y | z)) | (y & z))
+#define SHR(x, n)	(x >> n)
+#define ROTR(x, n)	((x >> n) | (x << (32 - n)))
+#define S0(x)		(ROTR(x, 2) ^ ROTR(x, 13) ^ ROTR(x, 22))
+#define S1(x)		(ROTR(x, 6) ^ ROTR(x, 11) ^ ROTR(x, 25))
+#define s0(x)		(ROTR(x, 7) ^ ROTR(x, 18) ^ SHR(x, 3))
+#define s1(x)		(ROTR(x, 17) ^ ROTR(x, 19) ^ SHR(x, 10))
 
 /* SHA256 round function */
-#define RND_legacy(a, b, c, d, e, f, g, h, k)			\
-	t0 = h + S1_legacy(e) + Ch_legacy(e, f, g) + k;		\
-	t1 = S0_legacy(a) + Maj_legacy(a, b, c);			\
+#define RND(a, b, c, d, e, f, g, h, k)			\
+	t0 = h + S1(e) + Ch(e, f, g) + k;		\
+	t1 = S0(a) + Maj(a, b, c);			\
 	d += t0;					\
 	h  = t0 + t1;
 
 /* Adjusted round function for rotating state */
-#define RNDr_legacy(S, W, i, k)			\
-	RND_legacy(S[(64 - i) % 8], S[(65 - i) % 8],	\
+#define RNDr(S, W, i, k)			\
+	RND(S[(64 - i) % 8], S[(65 - i) % 8],	\
 	    S[(66 - i) % 8], S[(67 - i) % 8],	\
 	    S[(68 - i) % 8], S[(69 - i) % 8],	\
 	    S[(70 - i) % 8], S[(71 - i) % 8],	\
@@ -89,7 +89,7 @@ be32dec_vect_legacy(uint32_t *dst, const unsigned char *src, size_t len)
  * the 512-bit input block to produce a new state.
  */
 static void
-SHA256_Transform_legacy(uint32_t * state, const unsigned char block[64])
+SHA256_Transform(uint32_t * state, const unsigned char block[64])
 {
 	uint32_t W[64];
 	uint32_t S[8];
@@ -97,85 +97,85 @@ SHA256_Transform_legacy(uint32_t * state, const unsigned char block[64])
 	int i;
 
 	/* 1. Prepare message schedule W. */
-	be32dec_vect_legacy(W, block, 64);
+	be32dec_vect(W, block, 64);
 	for (i = 16; i < 64; i++)
-		W[i] = s1_legacy(W[i - 2]) + W[i - 7] + s0_legacy(W[i - 15]) + W[i - 16];
+		W[i] = s1(W[i - 2]) + W[i - 7] + s0(W[i - 15]) + W[i - 16];
 
 	/* 2. Initialize working variables. */
 	memcpy(S, state, 32);
 
 	/* 3. Mix. */
-	RNDr_legacy(S, W, 0, 0x428a2f98);
-	RNDr_legacy(S, W, 1, 0x71374491);
-	RNDr_legacy(S, W, 2, 0xb5c0fbcf);
-	RNDr_legacy(S, W, 3, 0xe9b5dba5);
-	RNDr_legacy(S, W, 4, 0x3956c25b);
-	RNDr_legacy(S, W, 5, 0x59f111f1);
-	RNDr_legacy(S, W, 6, 0x923f82a4);
-	RNDr_legacy(S, W, 7, 0xab1c5ed5);
-	RNDr_legacy(S, W, 8, 0xd807aa98);
-	RNDr_legacy(S, W, 9, 0x12835b01);
-	RNDr_legacy(S, W, 10, 0x243185be);
-	RNDr_legacy(S, W, 11, 0x550c7dc3);
-	RNDr_legacy(S, W, 12, 0x72be5d74);
-	RNDr_legacy(S, W, 13, 0x80deb1fe);
-	RNDr_legacy(S, W, 14, 0x9bdc06a7);
-	RNDr_legacy(S, W, 15, 0xc19bf174);
-	RNDr_legacy(S, W, 16, 0xe49b69c1);
-	RNDr_legacy(S, W, 17, 0xefbe4786);
-	RNDr_legacy(S, W, 18, 0x0fc19dc6);
-	RNDr_legacy(S, W, 19, 0x240ca1cc);
-	RNDr_legacy(S, W, 20, 0x2de92c6f);
-	RNDr_legacy(S, W, 21, 0x4a7484aa);
-	RNDr_legacy(S, W, 22, 0x5cb0a9dc);
-	RNDr_legacy(S, W, 23, 0x76f988da);
-	RNDr_legacy(S, W, 24, 0x983e5152);
-	RNDr_legacy(S, W, 25, 0xa831c66d);
-	RNDr_legacy(S, W, 26, 0xb00327c8);
-	RNDr_legacy(S, W, 27, 0xbf597fc7);
-	RNDr_legacy(S, W, 28, 0xc6e00bf3);
-	RNDr_legacy(S, W, 29, 0xd5a79147);
-	RNDr_legacy(S, W, 30, 0x06ca6351);
-	RNDr_legacy(S, W, 31, 0x14292967);
-	RNDr_legacy(S, W, 32, 0x27b70a85);
-	RNDr_legacy(S, W, 33, 0x2e1b2138);
-	RNDr_legacy(S, W, 34, 0x4d2c6dfc);
-	RNDr_legacy(S, W, 35, 0x53380d13);
-	RNDr_legacy(S, W, 36, 0x650a7354);
-	RNDr_legacy(S, W, 37, 0x766a0abb);
-	RNDr_legacy(S, W, 38, 0x81c2c92e);
-	RNDr_legacy(S, W, 39, 0x92722c85);
-	RNDr_legacy(S, W, 40, 0xa2bfe8a1);
-	RNDr_legacy(S, W, 41, 0xa81a664b);
-	RNDr_legacy(S, W, 42, 0xc24b8b70);
-	RNDr_legacy(S, W, 43, 0xc76c51a3);
-	RNDr_legacy(S, W, 44, 0xd192e819);
-	RNDr_legacy(S, W, 45, 0xd6990624);
-	RNDr_legacy(S, W, 46, 0xf40e3585);
-	RNDr_legacy(S, W, 47, 0x106aa070);
-	RNDr_legacy(S, W, 48, 0x19a4c116);
-	RNDr_legacy(S, W, 49, 0x1e376c08);
-	RNDr_legacy(S, W, 50, 0x2748774c);
-	RNDr_legacy(S, W, 51, 0x34b0bcb5);
-	RNDr_legacy(S, W, 52, 0x391c0cb3);
-	RNDr_legacy(S, W, 53, 0x4ed8aa4a);
-	RNDr_legacy(S, W, 54, 0x5b9cca4f);
-	RNDr_legacy(S, W, 55, 0x682e6ff3);
-	RNDr_legacy(S, W, 56, 0x748f82ee);
-	RNDr_legacy(S, W, 57, 0x78a5636f);
-	RNDr_legacy(S, W, 58, 0x84c87814);
-	RNDr_legacy(S, W, 59, 0x8cc70208);
-	RNDr_legacy(S, W, 60, 0x90befffa);
-	RNDr_legacy(S, W, 61, 0xa4506ceb);
-	RNDr_legacy(S, W, 62, 0xbef9a3f7);
-	RNDr_legacy(S, W, 63, 0xc67178f2);
+	RNDr(S, W, 0, 0x428a2f98);
+	RNDr(S, W, 1, 0x71374491);
+	RNDr(S, W, 2, 0xb5c0fbcf);
+	RNDr(S, W, 3, 0xe9b5dba5);
+	RNDr(S, W, 4, 0x3956c25b);
+	RNDr(S, W, 5, 0x59f111f1);
+	RNDr(S, W, 6, 0x923f82a4);
+	RNDr(S, W, 7, 0xab1c5ed5);
+	RNDr(S, W, 8, 0xd807aa98);
+	RNDr(S, W, 9, 0x12835b01);
+	RNDr(S, W, 10, 0x243185be);
+	RNDr(S, W, 11, 0x550c7dc3);
+	RNDr(S, W, 12, 0x72be5d74);
+	RNDr(S, W, 13, 0x80deb1fe);
+	RNDr(S, W, 14, 0x9bdc06a7);
+	RNDr(S, W, 15, 0xc19bf174);
+	RNDr(S, W, 16, 0xe49b69c1);
+	RNDr(S, W, 17, 0xefbe4786);
+	RNDr(S, W, 18, 0x0fc19dc6);
+	RNDr(S, W, 19, 0x240ca1cc);
+	RNDr(S, W, 20, 0x2de92c6f);
+	RNDr(S, W, 21, 0x4a7484aa);
+	RNDr(S, W, 22, 0x5cb0a9dc);
+	RNDr(S, W, 23, 0x76f988da);
+	RNDr(S, W, 24, 0x983e5152);
+	RNDr(S, W, 25, 0xa831c66d);
+	RNDr(S, W, 26, 0xb00327c8);
+	RNDr(S, W, 27, 0xbf597fc7);
+	RNDr(S, W, 28, 0xc6e00bf3);
+	RNDr(S, W, 29, 0xd5a79147);
+	RNDr(S, W, 30, 0x06ca6351);
+	RNDr(S, W, 31, 0x14292967);
+	RNDr(S, W, 32, 0x27b70a85);
+	RNDr(S, W, 33, 0x2e1b2138);
+	RNDr(S, W, 34, 0x4d2c6dfc);
+	RNDr(S, W, 35, 0x53380d13);
+	RNDr(S, W, 36, 0x650a7354);
+	RNDr(S, W, 37, 0x766a0abb);
+	RNDr(S, W, 38, 0x81c2c92e);
+	RNDr(S, W, 39, 0x92722c85);
+	RNDr(S, W, 40, 0xa2bfe8a1);
+	RNDr(S, W, 41, 0xa81a664b);
+	RNDr(S, W, 42, 0xc24b8b70);
+	RNDr(S, W, 43, 0xc76c51a3);
+	RNDr(S, W, 44, 0xd192e819);
+	RNDr(S, W, 45, 0xd6990624);
+	RNDr(S, W, 46, 0xf40e3585);
+	RNDr(S, W, 47, 0x106aa070);
+	RNDr(S, W, 48, 0x19a4c116);
+	RNDr(S, W, 49, 0x1e376c08);
+	RNDr(S, W, 50, 0x2748774c);
+	RNDr(S, W, 51, 0x34b0bcb5);
+	RNDr(S, W, 52, 0x391c0cb3);
+	RNDr(S, W, 53, 0x4ed8aa4a);
+	RNDr(S, W, 54, 0x5b9cca4f);
+	RNDr(S, W, 55, 0x682e6ff3);
+	RNDr(S, W, 56, 0x748f82ee);
+	RNDr(S, W, 57, 0x78a5636f);
+	RNDr(S, W, 58, 0x84c87814);
+	RNDr(S, W, 59, 0x8cc70208);
+	RNDr(S, W, 60, 0x90befffa);
+	RNDr(S, W, 61, 0xa4506ceb);
+	RNDr(S, W, 62, 0xbef9a3f7);
+	RNDr(S, W, 63, 0xc67178f2);
 
 	/* 4. Mix local working variables into global state */
 	for (i = 0; i < 8; i++)
 		state[i] += S[i];
 }
 
-static unsigned char PAD_LEGACY[64] = {
+static unsigned char PAD[64] = {
 	0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -184,7 +184,7 @@ static unsigned char PAD_LEGACY[64] = {
 
 /* Add padding and terminating bit-count. */
 static void
-SHA256_Pad_legacy(SHA256_CTX * ctx)
+SHA256_Pad(SHA256_CTX * ctx)
 {
 	unsigned char len[8];
 	uint32_t r, plen;
@@ -193,20 +193,20 @@ SHA256_Pad_legacy(SHA256_CTX * ctx)
 	 * Convert length to a vector of bytes -- we do this now rather
 	 * than later because the length will change after we pad.
 	 */
-	be32enc_vect_legacy(len, ctx->count, 8);
+	be32enc_vect(len, ctx->count, 8);
 
 	/* Add 1--64 bytes so that the resulting length is 56 mod 64 */
 	r = (ctx->count[1] >> 3) & 0x3f;
 	plen = (r < 56) ? (56 - r) : (120 - r);
-	libscrypt_SHA256_Update_legacy(ctx, PAD_LEGACY, (size_t)plen);
+	libscrypt_SHA256_Update(ctx, PAD, (size_t)plen);
 
 	/* Add the terminating bit-count */
-	libscrypt_SHA256_Update_legacy(ctx, len, 8);
+	libscrypt_SHA256_Update(ctx, len, 8);
 }
 
 /* SHA-256 initialization.  Begins a SHA-256 operation. */
 void
-libscrypt_SHA256_Init_legacy(SHA256_CTX * ctx)
+libscrypt_SHA256_Init(SHA256_CTX * ctx)
 {
 
 	/* Zero bits processed so far */
@@ -225,7 +225,7 @@ libscrypt_SHA256_Init_legacy(SHA256_CTX * ctx)
 
 /* Add bytes into the hash */
 void
-libscrypt_SHA256_Update_legacy(SHA256_CTX * ctx, const void *in, size_t len)
+libscrypt_SHA256_Update(SHA256_CTX * ctx, const void *in, size_t len)
 {
 	uint32_t bitlen[2];
 	uint32_t r;
@@ -251,13 +251,13 @@ libscrypt_SHA256_Update_legacy(SHA256_CTX * ctx, const void *in, size_t len)
 
 	/* Finish the current block */
 	memcpy(&ctx->buf[r], src, 64 - r);
-	SHA256_Transform_legacy(ctx->state, ctx->buf);
+	SHA256_Transform(ctx->state, ctx->buf);
 	src += 64 - r;
 	len -= 64 - r;
 
 	/* Perform complete blocks */
 	while (len >= 64) {
-		SHA256_Transform_legacy(ctx->state, src);
+		SHA256_Transform(ctx->state, src);
 		src += 64;
 		len -= 64;
 	}
@@ -271,14 +271,14 @@ libscrypt_SHA256_Update_legacy(SHA256_CTX * ctx, const void *in, size_t len)
  * and clears the context state.
  */
 void
-libscrypt_SHA256_Final_legacy(unsigned char digest[32], SHA256_CTX * ctx)
+libscrypt_SHA256_Final(unsigned char digest[32], SHA256_CTX * ctx)
 {
 
 	/* Add padding */
-	SHA256_Pad_legacy(ctx);
+	SHA256_Pad(ctx);
 
 	/* Write the hash */
-	be32enc_vect_legacy(digest, ctx->state, 32);
+	be32enc_vect(digest, ctx->state, 32);
 
 	/* Clear the context state */
 	memset((void *)ctx, 0, sizeof(*ctx));
@@ -286,7 +286,7 @@ libscrypt_SHA256_Final_legacy(unsigned char digest[32], SHA256_CTX * ctx)
 
 /* Initialize an HMAC-SHA256 operation with the given key. */
 void
-libscrypt_HMAC_SHA256_Init_legacy(HMAC_SHA256_CTX * ctx, const void * _K, size_t Klen)
+libscrypt_HMAC_SHA256_Init(HMAC_SHA256_CTX * ctx, const void * _K, size_t Klen)
 {
 	unsigned char pad[64];
 	unsigned char khash[32];
@@ -295,51 +295,51 @@ libscrypt_HMAC_SHA256_Init_legacy(HMAC_SHA256_CTX * ctx, const void * _K, size_t
 
 	/* If Klen > 64, the key is really SHA256(K). */
 	if (Klen > 64) {
-		libscrypt_SHA256_Init_legacy(&ctx->ictx);
-		libscrypt_SHA256_Update_legacy(&ctx->ictx, K, Klen);
-		libscrypt_SHA256_Final_legacy(khash, &ctx->ictx);
+		libscrypt_SHA256_Init(&ctx->ictx);
+		libscrypt_SHA256_Update(&ctx->ictx, K, Klen);
+		libscrypt_SHA256_Final(khash, &ctx->ictx);
 		K = khash;
 		Klen = 32;
 	}
 
 	/* Inner SHA256 operation is SHA256(K xor [block of 0x36] || data). */
-	libscrypt_SHA256_Init_legacy(&ctx->ictx);
+	libscrypt_SHA256_Init(&ctx->ictx);
 	memset(pad, 0x36, 64);
 	for (i = 0; i < Klen; i++)
 		pad[i] ^= K[i];
-	libscrypt_SHA256_Update_legacy(&ctx->ictx, pad, 64);
+	libscrypt_SHA256_Update(&ctx->ictx, pad, 64);
 
 	/* Outer SHA256 operation is SHA256(K xor [block of 0x5c] || hash). */
-	libscrypt_SHA256_Init_legacy(&ctx->octx);
+	libscrypt_SHA256_Init(&ctx->octx);
 	memset(pad, 0x5c, 64);
 	for (i = 0; i < Klen; i++)
 		pad[i] ^= K[i];
-	libscrypt_SHA256_Update_legacy(&ctx->octx, pad, 64);
+	libscrypt_SHA256_Update(&ctx->octx, pad, 64);
 }
 
 /* Add bytes to the HMAC-SHA256 operation. */
 void
-libscrypt_HMAC_SHA256_Update_legacy(HMAC_SHA256_CTX * ctx, const void *in, size_t len)
+libscrypt_HMAC_SHA256_Update(HMAC_SHA256_CTX * ctx, const void *in, size_t len)
 {
 
 	/* Feed data to the inner SHA256 operation. */
-	libscrypt_SHA256_Update_legacy(&ctx->ictx, in, len);
+	libscrypt_SHA256_Update(&ctx->ictx, in, len);
 }
 
 /* Finish an HMAC-SHA256 operation. */
 void
-libscrypt_HMAC_SHA256_Final_legacy(unsigned char digest[32], HMAC_SHA256_CTX * ctx)
+libscrypt_HMAC_SHA256_Final(unsigned char digest[32], HMAC_SHA256_CTX * ctx)
 {
 	unsigned char ihash[32];
 
 	/* Finish the inner SHA256 operation. */
-	libscrypt_SHA256_Final_legacy(ihash, &ctx->ictx);
+	libscrypt_SHA256_Final(ihash, &ctx->ictx);
 
 	/* Feed the inner hash to the outer SHA256 operation. */
-	libscrypt_SHA256_Update_legacy(&ctx->octx, ihash, 32);
+	libscrypt_SHA256_Update(&ctx->octx, ihash, 32);
 
 	/* Finish the outer SHA256 operation. */
-	libscrypt_SHA256_Final_legacy(digest, &ctx->octx);
+	libscrypt_SHA256_Final(digest, &ctx->octx);
 }
 
 /**
@@ -348,7 +348,7 @@ libscrypt_HMAC_SHA256_Final_legacy(unsigned char digest[32], HMAC_SHA256_CTX * c
  * write the output to buf.  The value dkLen must be at most 32 * (2^32 - 1).
  */
 void
-libscrypt_PBKDF2_SHA256_legacy(const uint8_t * passwd, size_t passwdlen, const uint8_t * salt,
+libscrypt_PBKDF2_SHA256(const uint8_t * passwd, size_t passwdlen, const uint8_t * salt,
     size_t saltlen, uint64_t c, uint8_t * buf, size_t dkLen)
 {
 	HMAC_SHA256_CTX PShctx, hctx;
@@ -361,27 +361,27 @@ libscrypt_PBKDF2_SHA256_legacy(const uint8_t * passwd, size_t passwdlen, const u
 	size_t clen;
 
 	/* Compute HMAC state after processing P and S. */
-	libscrypt_HMAC_SHA256_Init_legacy(&PShctx, passwd, passwdlen);
-	libscrypt_HMAC_SHA256_Update_legacy(&PShctx, salt, saltlen);
+	libscrypt_HMAC_SHA256_Init(&PShctx, passwd, passwdlen);
+	libscrypt_HMAC_SHA256_Update(&PShctx, salt, saltlen);
 
 	/* Iterate through the blocks. */
 	for (i = 0; i * 32 < dkLen; i++) {
 		/* Generate INT(i + 1). */
-		be32enc_legacy(ivec, (uint32_t)(i + 1));
+		be32enc(ivec, (uint32_t)(i + 1));
 
 		/* Compute U_1 = PRF(P, S || INT(i)). */
 		memcpy(&hctx, &PShctx, sizeof(HMAC_SHA256_CTX));
-		libscrypt_HMAC_SHA256_Update_legacy(&hctx, ivec, 4);
-		libscrypt_HMAC_SHA256_Final_legacy(U, &hctx);
+		libscrypt_HMAC_SHA256_Update(&hctx, ivec, 4);
+		libscrypt_HMAC_SHA256_Final(U, &hctx);
 
 		/* T_i = U_1 ... */
 		memcpy(T, U, 32);
 
 		for (j = 2; j <= c; j++) {
 			/* Compute U_j. */
-			libscrypt_HMAC_SHA256_Init_legacy(&hctx, passwd, passwdlen);
-			libscrypt_HMAC_SHA256_Update_legacy(&hctx, U, 32);
-			libscrypt_HMAC_SHA256_Final_legacy(U, &hctx);
+			libscrypt_HMAC_SHA256_Init(&hctx, passwd, passwdlen);
+			libscrypt_HMAC_SHA256_Update(&hctx, U, 32);
+			libscrypt_HMAC_SHA256_Final(U, &hctx);
 
 			/* ... xor U_j ... */
 			for (k = 0; k < 32; k++)

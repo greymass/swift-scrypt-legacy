@@ -36,32 +36,35 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "sha256_legacy.h"
-#include "sysendian_legacy.h"
+#include "sha256.h"
+#include "sysendian.h"
 
-#include "libscrypt_legacy.h"
+#include "libscrypt.h"
 
-static void blkcpy_legacy(void *, void *, size_t);
-static void blkxor_legacy(void *, void *, size_t);
-static void salsa20_8_legacy(uint32_t[16]);
-static void blockmix_salsa8_legacy(uint32_t *, uint32_t *, uint32_t *, size_t);
-static uint64_t integerify_legacy(void *, size_t);
-static void smix_legacy(uint8_t *, size_t, uint64_t, uint32_t *, uint32_t *);
+static void blkcpy(void *, void *, size_t);
+static void blkxor(void *, void *, size_t);
+static void salsa20_8(uint32_t[16]);
+static void blockmix_salsa8(uint32_t *, uint32_t *, uint32_t *, size_t);
+static uint64_t integerify(void *, size_t);
+static void smix(uint8_t *, size_t, uint64_t, uint32_t *, uint32_t *);
+
+// static void
+// blkcpy(void * dest, void * src, size_t len)
+// {
+// 	size_t * D = dest;
+// 	size_t * S = src;
+// 	size_t L = len / sizeof(size_t);
+// 	size_t i;
+
+// 	for (i = 0; i < L; i++)
+// 		D[i] = S[i];
+// }
+// Workaround for Apple compiler bug that breaks the above in -Os
+// See: https://github.com/technion/libscrypt/issues/60
+#define blkcpy(dest, src, len) memmove((dest), (src), (len))
 
 static void
-blkcpy_legacy(void * dest, void * src, size_t len)
-{
-	size_t * D = dest;
-	size_t * S = src;
-	size_t L = len / sizeof(size_t);
-	size_t i;
-
-	for (i = 0; i < L; i++)
-		D[i] = S[i];
-}
-
-static void
-blkxor_legacy(void * dest, void * src, size_t len)
+blkxor(void * dest, void * src, size_t len)
 {
 	size_t * D = dest;
 	size_t * S = src;
@@ -73,89 +76,89 @@ blkxor_legacy(void * dest, void * src, size_t len)
 }
 
 /**
- * salsa20_8_legacy(B):
+ * salsa20_8(B):
  * Apply the salsa20/8 core to the provided block.
  */
 static void
-salsa20_8_legacy(uint32_t B[16])
+salsa20_8(uint32_t B[16])
 {
 	uint32_t x[16];
 	size_t i;
 
-	blkcpy_legacy(x, B, 64);
+	blkcpy(x, B, 64);
 	for (i = 0; i < 8; i += 2) {
-#define R_LEGACY(a,b) (((a) << (b)) | ((a) >> (32 - (b))))
+#define R(a,b) (((a) << (b)) | ((a) >> (32 - (b))))
 		/* Operate on columns. */
-		x[ 4] ^= R_LEGACY(x[ 0]+x[12], 7);  x[ 8] ^= R_LEGACY(x[ 4]+x[ 0], 9);
-		x[12] ^= (x[ 8]+x[ 4],13);  x[ 0] ^= R_LEGACY(x[12]+x[ 8],18);
+		x[ 4] ^= R(x[ 0]+x[12], 7);  x[ 8] ^= R(x[ 4]+x[ 0], 9);
+		x[12] ^= R(x[ 8]+x[ 4],13);  x[ 0] ^= R(x[12]+x[ 8],18);
 
-		x[ 9] ^= R_LEGACY(x[ 5]+x[ 1], 7);  x[13] ^= R_LEGACY(x[ 9]+x[ 5], 9);
-		x[ 1] ^= R_LEGACY(x[13]+x[ 9],13);  x[ 5] ^= R_LEGACY(x[ 1]+x[13],18);
+		x[ 9] ^= R(x[ 5]+x[ 1], 7);  x[13] ^= R(x[ 9]+x[ 5], 9);
+		x[ 1] ^= R(x[13]+x[ 9],13);  x[ 5] ^= R(x[ 1]+x[13],18);
 
-		x[14] ^= R_LEGACY(x[10]+x[ 6], 7);  x[ 2] ^= R_LEGACY(x[14]+x[10], 9);
-		x[ 6] ^= R_LEGACY(x[ 2]+x[14],13);  x[10] ^= R_LEGACY(x[ 6]+x[ 2],18);
+		x[14] ^= R(x[10]+x[ 6], 7);  x[ 2] ^= R(x[14]+x[10], 9);
+		x[ 6] ^= R(x[ 2]+x[14],13);  x[10] ^= R(x[ 6]+x[ 2],18);
 
-		x[ 3] ^= R_LEGACY(x[15]+x[11], 7);  x[ 7] ^= R_LEGACY(x[ 3]+x[15], 9);
-		x[11] ^= R_LEGACY(x[ 7]+x[ 3],13);  x[15] ^= R_LEGACY(x[11]+x[ 7],18);
+		x[ 3] ^= R(x[15]+x[11], 7);  x[ 7] ^= R(x[ 3]+x[15], 9);
+		x[11] ^= R(x[ 7]+x[ 3],13);  x[15] ^= R(x[11]+x[ 7],18);
 
 		/* Operate on rows. */
-		x[ 1] ^= R_LEGACY(x[ 0]+x[ 3], 7);  x[ 2] ^= R_LEGACY(x[ 1]+x[ 0], 9);
-		x[ 3] ^= R_LEGACY(x[ 2]+x[ 1],13);  x[ 0] ^= R_LEGACY(x[ 3]+x[ 2],18);
+		x[ 1] ^= R(x[ 0]+x[ 3], 7);  x[ 2] ^= R(x[ 1]+x[ 0], 9);
+		x[ 3] ^= R(x[ 2]+x[ 1],13);  x[ 0] ^= R(x[ 3]+x[ 2],18);
 
-		x[ 6] ^= R_LEGACY(x[ 5]+x[ 4], 7);  x[ 7] ^= R_LEGACY(x[ 6]+x[ 5], 9);
-		x[ 4] ^= R_LEGACY(x[ 7]+x[ 6],13);  x[ 5] ^= R_LEGACY(x[ 4]+x[ 7],18);
+		x[ 6] ^= R(x[ 5]+x[ 4], 7);  x[ 7] ^= R(x[ 6]+x[ 5], 9);
+		x[ 4] ^= R(x[ 7]+x[ 6],13);  x[ 5] ^= R(x[ 4]+x[ 7],18);
 
-		x[11] ^= R_LEGACY(x[10]+x[ 9], 7);  x[ 8] ^= R_LEGACY(x[11]+x[10], 9);
-		x[ 9] ^= R_LEGACY(x[ 8]+x[11],13);  x[10] ^= R_LEGACY(x[ 9]+x[ 8],18);
+		x[11] ^= R(x[10]+x[ 9], 7);  x[ 8] ^= R(x[11]+x[10], 9);
+		x[ 9] ^= R(x[ 8]+x[11],13);  x[10] ^= R(x[ 9]+x[ 8],18);
 
-		x[12] ^= R_LEGACY(x[15]+x[14], 7);  x[13] ^= R_LEGACY(x[12]+x[15], 9);
-		x[14] ^= R_LEGACY(x[13]+x[12],13);  x[15] ^= R_LEGACY(x[14]+x[13],18);
-#undef R_LEGACY
+		x[12] ^= R(x[15]+x[14], 7);  x[13] ^= R(x[12]+x[15], 9);
+		x[14] ^= R(x[13]+x[12],13);  x[15] ^= R(x[14]+x[13],18);
+#undef R
 	}
 	for (i = 0; i < 16; i++)
 		B[i] += x[i];
 }
 
 /**
- * blockmix_salsa8_legacy(Bin, Bout, X, r):
+ * blockmix_salsa8(Bin, Bout, X, r):
  * Compute Bout = BlockMix_{salsa20/8, r}(Bin).  The input Bin must be 128r
  * bytes in length; the output Bout must also be the same size.  The
  * temporary space X must be 64 bytes.
  */
 static void
-blockmix_salsa8_legacy(uint32_t * Bin, uint32_t * Bout, uint32_t * X, size_t r)
+blockmix_salsa8(uint32_t * Bin, uint32_t * Bout, uint32_t * X, size_t r)
 {
 	size_t i;
 
 	/* 1: X <-- B_{2r - 1} */
-	blkcpy_legacy(X, &Bin[(2 * r - 1) * 16], 64);
+	blkcpy(X, &Bin[(2 * r - 1) * 16], 64);
 
 	/* 2: for i = 0 to 2r - 1 do */
 	for (i = 0; i < 2 * r; i += 2) {
 		/* 3: X <-- H(X \xor B_i) */
-		blkxor_legacy(X, &Bin[i * 16], 64);
-		salsa20_8_legacy(X);
+		blkxor(X, &Bin[i * 16], 64);
+		salsa20_8(X);
 
 		/* 4: Y_i <-- X */
 		/* 6: B' <-- (Y_0, Y_2 ... Y_{2r-2}, Y_1, Y_3 ... Y_{2r-1}) */
-		blkcpy_legacy(&Bout[i * 8], X, 64);
+		blkcpy(&Bout[i * 8], X, 64);
 
 		/* 3: X <-- H(X \xor B_i) */
-		blkxor_legacy(X, &Bin[i * 16 + 16], 64);
-		salsa20_8_legacy(X);
+		blkxor(X, &Bin[i * 16 + 16], 64);
+		salsa20_8(X);
 
 		/* 4: Y_i <-- X */
 		/* 6: B' <-- (Y_0, Y_2 ... Y_{2r-2}, Y_1, Y_3 ... Y_{2r-1}) */
-		blkcpy_legacy(&Bout[i * 8 + r * 16], X, 64);
+		blkcpy(&Bout[i * 8 + r * 16], X, 64);
 	}
 }
 
 /**
- * integerify_legacy(B, r):
+ * integerify(B, r):
  * Return the result of parsing B_{2r-1} as a little-endian integer.
  */
 static uint64_t
-integerify_legacy(void * B, size_t r)
+integerify(void * B, size_t r)
 {
 	uint32_t * X = (void *)((uintptr_t)(B) + (2 * r - 1) * 64);
 
@@ -163,15 +166,15 @@ integerify_legacy(void * B, size_t r)
 }
 
 /**
- * smix_legacy(B, r, N, V, XY):
- * Compute B = smix_legacy_R_LEGACY(B, N).  The input B must be 128r bytes in length;
+ * smix(B, r, N, V, XY):
+ * Compute B = SMix_r(B, N).  The input B must be 128r bytes in length;
  * the temporary storage V must be 128rN bytes in length; the temporary
  * storage XY must be 256r + 64 bytes in length.  The value N must be a
  * power of 2 greater than 1.  The arrays B, V, and XY must be aligned to a
  * multiple of 64 bytes.
  */
 static void
-smix_legacy(uint8_t * B, size_t r, uint64_t N, uint32_t * V, uint32_t * XY)
+smix(uint8_t * B, size_t r, uint64_t N, uint32_t * V, uint32_t * XY)
 {
 	uint32_t * X = XY;
 	uint32_t * Y = &XY[32 * r];
@@ -182,43 +185,43 @@ smix_legacy(uint8_t * B, size_t r, uint64_t N, uint32_t * V, uint32_t * XY)
 
 	/* 1: X <-- B */
 	for (k = 0; k < 32 * r; k++)
-		X[k] = le32dec_legacy(&B[4 * k]);
+		X[k] = le32dec(&B[4 * k]);
 
 	/* 2: for i = 0 to N - 1 do */
 	for (i = 0; i < N; i += 2) {
 		/* 3: V_i <-- X */
-		blkcpy_legacy(&V[i * (32 * r)], X, 128 * r);
+		blkcpy(&V[i * (32 * r)], X, 128 * r);
 
 		/* 4: X <-- H(X) */
-		blockmix_salsa8_legacy(X, Y, Z, r);
+		blockmix_salsa8(X, Y, Z, r);
 
 		/* 3: V_i <-- X */
-		blkcpy_legacy(&V[(i + 1) * (32 * r)], Y, 128 * r);
+		blkcpy(&V[(i + 1) * (32 * r)], Y, 128 * r);
 
 		/* 4: X <-- H(X) */
-		blockmix_salsa8_legacy(Y, X, Z, r);
+		blockmix_salsa8(Y, X, Z, r);
 	}
 
 	/* 6: for i = 0 to N - 1 do */
 	for (i = 0; i < N; i += 2) {
-		/* 7: j <-- integerify_legacy(X) mod N */
-		j = integerify_legacy(X, r) & (N - 1);
+		/* 7: j <-- Integerify(X) mod N */
+		j = integerify(X, r) & (N - 1);
 
 		/* 8: X <-- H(X \xor V_j) */
-		blkxor_legacy(X, &V[j * (32 * r)], 128 * r);
-		blockmix_salsa8_legacy(X, Y, Z, r);
+		blkxor(X, &V[j * (32 * r)], 128 * r);
+		blockmix_salsa8(X, Y, Z, r);
 
-		/* 7: j <-- integerify_legacy(X) mod N */
-		j = integerify_legacy(Y, r) & (N - 1);
+		/* 7: j <-- Integerify(X) mod N */
+		j = integerify(Y, r) & (N - 1);
 
 		/* 8: X <-- H(X \xor V_j) */
-		blkxor_legacy(Y, &V[j * (32 * r)], 128 * r);
-		blockmix_salsa8_legacy(Y, X, Z, r);
+		blkxor(Y, &V[j * (32 * r)], 128 * r);
+		blockmix_salsa8(Y, X, Z, r);
 	}
 
 	/* 10: B' <-- X */
 	for (k = 0; k < 32 * r; k++)
-		le32enc_legacy(&B[4 * k], X[k]);
+		le32enc(&B[4 * k], X[k]);
 }
 
 /**
@@ -231,7 +234,7 @@ smix_legacy(uint8_t * B, size_t r, uint64_t N, uint32_t * V, uint32_t * XY)
  * Return 0 on success; or -1 on error
  */
 int
-libscrypt_scrypt_legacy(const uint8_t * passwd, size_t passwdlen,
+libscrypt_scrypt(const uint8_t * passwd, size_t passwdlen,
     const uint8_t * salt, size_t saltlen, uint64_t N, uint32_t r, uint32_t p,
     uint8_t * buf, size_t buflen)
 {
@@ -308,16 +311,16 @@ libscrypt_scrypt_legacy(const uint8_t * passwd, size_t passwdlen,
 #endif
 
 	/* 1: (B_0 ... B_{p-1}) <-- PBKDF2(P, S, 1, p * MFLen) */
-	libscrypt_PBKDF2_SHA256_legacy(passwd, passwdlen, salt, saltlen, 1, B, p * 128 * r);
+	libscrypt_PBKDF2_SHA256(passwd, passwdlen, salt, saltlen, 1, B, p * 128 * r);
 
 	/* 2: for i = 0 to p - 1 do */
 	for (i = 0; i < p; i++) {
 		/* 3: B_i <-- MF(B_i, N) */
-		smix_legacy(&B[i * 128 * r], r, N, V, XY);
+		smix(&B[i * 128 * r], r, N, V, XY);
 	}
 
 	/* 5: DK <-- PBKDF2(P, B, 1, dkLen) */
-	libscrypt_PBKDF2_SHA256_legacy(passwd, passwdlen, B, p * 128 * r, 1, buf, buflen);
+	libscrypt_PBKDF2_SHA256(passwd, passwdlen, B, p * 128 * r, 1, buf, buflen);
 
 	/* Free memory. */
 #ifdef MAP_ANON

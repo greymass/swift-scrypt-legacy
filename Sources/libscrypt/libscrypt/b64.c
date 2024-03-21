@@ -41,7 +41,7 @@
  */
 
 /*
- * Base64_legacy encode/decode functions from OpenBSD (src/lib/libc/net/base64.c).
+ * Base64 encode/decode functions from OpenBSD (src/lib/libc/net/base64.c).
  */
 #include <stdio.h>
 #include <string.h>
@@ -49,12 +49,12 @@
 #include <ctype.h>
 #include <sys/types.h>
 
-#include "b64_legacy.h"
+#include "b64.h"
 
 
-static const char Base64_legacy[] =
+static const char Base64[] =
 	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-static const char Pad64_legacy = '=';
+static const char Pad64 = '=';
 
 /* (From RFC1521 and draft-ietf-dnssec-secext-03.txt)
    The following encoding technique is taken from RFC 1521 by Borenstein
@@ -75,7 +75,7 @@ static const char Pad64_legacy = '=';
    characters. The character referenced by the index is placed in the
    output string.
 
-                         Table 1: The Base64_legacy Alphabet
+                         Table 1: The Base64 Alphabet
 
       Value Encoding  Value Encoding  Value Encoding  Value Encoding
           0 A            17 R            34 i            51 z
@@ -120,7 +120,7 @@ static const char Pad64_legacy = '=';
 */
 
 int
-libscrypt_b64_encode_legacy(src, srclength, target, targsize)
+libscrypt_b64_encode(src, srclength, target, targsize)
 	unsigned char const *src;
 	size_t srclength;
 	char *target;
@@ -144,10 +144,10 @@ libscrypt_b64_encode_legacy(src, srclength, target, targsize)
 
 		if (datalength + 4 > targsize)
 			return (-1);
-		target[datalength++] = Base64_legacy[output[0]];
-		target[datalength++] = Base64_legacy[output[1]];
-		target[datalength++] = Base64_legacy[output[2]];
-		target[datalength++] = Base64_legacy[output[3]];
+		target[datalength++] = Base64[output[0]];
+		target[datalength++] = Base64[output[1]];
+		target[datalength++] = Base64[output[2]];
+		target[datalength++] = Base64[output[3]];
 	}
 
 	/* Now we worry about padding. */
@@ -163,13 +163,13 @@ libscrypt_b64_encode_legacy(src, srclength, target, targsize)
 
 		if (datalength + 4 > targsize)
 			return (-1);
-		target[datalength++] = Base64_legacy[output[0]];
-		target[datalength++] = Base64_legacy[output[1]];
+		target[datalength++] = Base64[output[0]];
+		target[datalength++] = Base64[output[1]];
 		if (srclength == 1)
-			target[datalength++] = Pad64_legacy;
+			target[datalength++] = Pad64;
 		else
-			target[datalength++] = Base64_legacy[output[2]];
-		target[datalength++] = Pad64_legacy;
+			target[datalength++] = Base64[output[2]];
+		target[datalength++] = Pad64;
 	}
 	if (datalength >= targsize)
 		return (-1);
@@ -184,7 +184,7 @@ libscrypt_b64_encode_legacy(src, srclength, target, targsize)
  */
 
 int
-libscrypt_b64_decode_legacy(src, target, targsize)
+libscrypt_b64_decode(src, target, targsize)
 	char const *src;
 	unsigned char *target;
 	size_t targsize;
@@ -201,10 +201,10 @@ libscrypt_b64_decode_legacy(src, target, targsize)
 		if (isspace(ch))	/* Skip whitespace anywhere. */
 			continue;
 
-		if (ch == Pad64_legacy)
+		if (ch == Pad64)
 			break;
 
-		pos = strchr(Base64_legacy, ch);
+		pos = strchr(Base64, ch);
 		if (pos == 0) 		/* A non-base64 character. */
 			return (-1);
 
@@ -213,7 +213,7 @@ libscrypt_b64_decode_legacy(src, target, targsize)
 			if (target) {
 				if (tarindex >= targsize)
 					return (-1);
-				target[tarindex] = (pos - Base64_legacy) << 2;
+				target[tarindex] = (pos - Base64) << 2;
 			}
 			state = 1;
 			break;
@@ -221,8 +221,8 @@ libscrypt_b64_decode_legacy(src, target, targsize)
 			if (target) {
 				if (tarindex >= targsize)
 					return (-1);
-				target[tarindex]   |=  (pos - Base64_legacy) >> 4;
-				nextbyte = ((pos - Base64_legacy) & 0x0f) << 4;
+				target[tarindex]   |=  (pos - Base64) >> 4;
+				nextbyte = ((pos - Base64) & 0x0f) << 4;
 				if (tarindex + 1 < targsize)
 					target[tarindex+1] = nextbyte;
 				else if (nextbyte)
@@ -235,8 +235,8 @@ libscrypt_b64_decode_legacy(src, target, targsize)
 			if (target) {
 				if (tarindex >= targsize)
 					return (-1);
-				target[tarindex]   |=  (pos - Base64_legacy) >> 2;
-				nextbyte = ((pos - Base64_legacy) & 0x03) << 6;
+				target[tarindex]   |=  (pos - Base64) >> 2;
+				nextbyte = ((pos - Base64) & 0x03) << 6;
 				if (tarindex + 1 < targsize)
 					target[tarindex+1] = nextbyte;
 				else if (nextbyte)
@@ -249,7 +249,7 @@ libscrypt_b64_decode_legacy(src, target, targsize)
 			if (target) {
 				if (tarindex >= targsize)
 					return (-1);
-				target[tarindex] |= (pos - Base64_legacy);
+				target[tarindex] |= (pos - Base64);
 			}
 			tarindex++;
 			state = 0;
@@ -262,7 +262,7 @@ libscrypt_b64_decode_legacy(src, target, targsize)
 	 * on a byte boundary, and/or with erroneous trailing characters.
 	 */
 
-	if (ch == Pad64_legacy) {			/* We got a pad char. */
+	if (ch == Pad64) {			/* We got a pad char. */
 		ch = (unsigned char)*src++;	/* Skip it, get next. */
 		switch (state) {
 		case 0:		/* Invalid = in first position */
@@ -275,7 +275,7 @@ libscrypt_b64_decode_legacy(src, target, targsize)
 				if (!isspace(ch))
 					break;
 			/* Make sure there is another trailing = sign. */
-			if (ch != Pad64_legacy)
+			if (ch != Pad64)
 				return (-1);
 			ch = (unsigned char)*src++;		/* Skip the = */
 			/* Fall through to "single trailing =" case. */

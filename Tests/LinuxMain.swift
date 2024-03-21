@@ -1,6 +1,6 @@
 import XCTest
 
-import ScryptLegacyTests
+import ScryptTests
 
 var tests = [XCTestCaseEntry]()
 tests += ScryptTests.__allTests()

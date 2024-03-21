@@ -5,19 +5,19 @@ import PackageDescription
 let package = Package(
     name: "swift-scrypt-legacy",
     products: [
-        .library(name: "ScryptLegacy", targets: ["ScryptLegacy"]),
+        .library(name: "Scrypt", targets: ["Scrypt"]),
     ],
     dependencies: [],
     targets: [
-        .target(name: "ScryptLegacy", dependencies: ["libscryptLegacy"]),
+        .target(name: "Scrypt", dependencies: ["libscrypt"]),
         .target(
-            name: "libscryptLegacy",
+            name: "libscrypt",
             sources: [
-                "libscryptLegacy/crypto_scrypt_legacy-nosse.c",
-                "libscryptLegacy/sha256_legacy.c",
-                "libscryptLegacy/slowequals_legacy.c",
+                "libscrypt/crypto_scrypt-nosse.c",
+                "libscrypt/sha256.c",
+                "libscrypt/slowequals.c",
             ]
         ),
-        .testTarget(name: "ScryptLegacyTests", dependencies: ["ScryptLegacy"]),
+        .testTarget(name: "ScryptTests", dependencies: ["Scrypt"]),
     ]
 )
