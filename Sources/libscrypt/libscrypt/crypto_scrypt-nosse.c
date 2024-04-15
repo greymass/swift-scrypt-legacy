@@ -41,7 +41,7 @@
 
 #include "libscrypt.h"
 
-static void blkcpy(void *, void *, size_t);
+// static void blkcpy(void *, void *, size_t);
 static void blkcpy_conditional(void *, void *, size_t, int);
 static void blkxor(void *, void *, size_t);
 static void salsa20_8(uint32_t[16], int);
@@ -49,30 +49,36 @@ static void blockmix_salsa8(uint32_t *, uint32_t *, uint32_t *, size_t, int);
 static uint64_t integerify(void *, size_t);
 static void smix(uint8_t *, size_t, uint64_t, uint32_t *, uint32_t *, int);
 
-static void
-blkcpy_conditional(void * dest, void * src, size_t len, int useOldCompiler)
-{
-	size_t * D = dest;
-	size_t * S = src;
-	size_t L = len / sizeof(size_t);
-	size_t i;
+// static void
+// blkcpy(void * dest, void * src, size_t len)
+// {
+// 	size_t * D = dest;
+// 	size_t * S = src;
+// 	size_t L = len / sizeof(size_t);
+// 	size_t i;
 
-	for (i = 0; i < L; i++)
-		D[i] = S[i];
-}
+// 	for (i = 0; i < L; i++)
+// 		D[i] = S[i];
+// }
 
 // Workaround for Apple compiler bug that breaks the above in -Os
 // See: https://github.com/technion/libscrypt/issues/60
 // #define blkcpy(dest, src, len) memmove((dest), (src), (len))
 
 // The following function supports both the old and new compilers 
-// static void blkcpy_conditional(void *dest, void *src, size_t len, int useOldCompiler) {
-    // if (useOldCompiler == 1) {
-		// blkcpy(dest, src, len);
-    // } else {
-	// 	memmove((dest), (src), (len));
-    // }
-// }
+ static void blkcpy_conditional(void *dest, void *src, size_t len, int useOldCompiler) {
+     if (useOldCompiler == 1) {
+		size_t * D = dest;
+		size_t * S = src;
+		size_t L = len / sizeof(size_t);
+		size_t i;
+
+		for (i = 0; i < L; i++)
+			D[i] = S[i];
+     } else {
+	 	memmove((dest), (src), (len));
+     }
+ }
 
 static void
 blkxor(void * dest, void * src, size_t len)
@@ -242,7 +248,7 @@ smix(uint8_t * B, size_t r, uint64_t N, uint32_t * V, uint32_t * XY, int useOldC
 int
 libscrypt_scrypt(const uint8_t * passwd, size_t passwdlen,
     const uint8_t * salt, size_t saltlen, uint64_t N, uint32_t r, uint32_t p,
-    uint8_t * buf, size_t buflen, int useOldCompiler)
+    uint8_t * buf, size_t buflen, uint32_t useOldCompiler)
 {
 	void * B0, * V0, * XY0;
 	uint8_t * B;

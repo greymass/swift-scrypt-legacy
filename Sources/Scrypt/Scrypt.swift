@@ -44,13 +44,13 @@ public func scrypt(password: [UInt8], salt: [UInt8], length: Int = 64,
                     throw ScryptError.emptySalt
                 }
                 // Convert useOldCompiler to the format expected by C (int).
-                let useOldCompilerInt = useOldCompiler ? 1 : 0
+                let useOldCompilerInt: UInt32 = useOldCompiler ? 1 : 0
                 result = libscrypt_scrypt(
                     passwd.baseAddress!, passwd.count,
                     saltptr.baseAddress!, saltptr.count,
                     N, r, p,
                     bufptr.baseAddress!, length,
-                    Int32(useOldCompilerInt) // Pass the useOldCompiler flag to the C function.
+                    useOldCompilerInt // Pass the useOldCompiler flag to the C function.
                 )
             }
         }

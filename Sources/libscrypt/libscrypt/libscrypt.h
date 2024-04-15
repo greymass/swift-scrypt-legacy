@@ -27,7 +27,7 @@ extern "C"{
  * Return 0 on success; or -1 on error.
  */
 int libscrypt_scrypt(const uint8_t *, size_t, const uint8_t *, size_t, uint64_t,
-    uint32_t, uint32_t, /*@out@*/ uint8_t *, size_t, int);
+    uint32_t, uint32_t, /*@out@*/ uint8_t *, size_t, uint32_t);
 
 /* Converts a series of input parameters to a MCF form for storage */
 int libscrypt_mcf(uint32_t N, uint32_t r, uint32_t p, const char *salt,
